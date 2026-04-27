@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: rakuten-bulk-editor
+    runtime: python
+    plan: free
+    autoDeploy: true
+    buildCommand: ""
+    startCommand: python3 tools/rakuten_bulk_web.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9

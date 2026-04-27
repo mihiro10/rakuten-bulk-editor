@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.DS_Store
+
+# Local data exports and working files
+*.xlsx
+item_ato_test*.csv
+mae_edit*.csv
+mae_reedited*.csv
+
+# Local snapshots / scratch outputs
+snapshots/
