@@ -310,10 +310,10 @@ def _extract_edit_values(source: Optional[ParsedBlock], url_bases: Dict[str, str
     return {
         K_P1_CODE: _compact_href_to_code(source.p1.href, url_bases),
         K_P1_NAME: source.p1.alt,
-        K_P1_IMG: _strip_base(source.p1.img_src, url_bases["img"]),
+        K_P1_IMG: source.p1.img_src,
         K_P2_CODE: _compact_href_to_code(source.p2.href, url_bases),
         K_P2_NAME: source.p2.alt,
-        K_P2_IMG: _strip_base(source.p2.img_src, url_bases["img"]),
+        K_P2_IMG: source.p2.img_src,
     }
 
 

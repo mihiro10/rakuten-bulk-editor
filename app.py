@@ -8,7 +8,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
-from typing import List
+from typing import List, Optional, Tuple
 
 import streamlit as st
 
@@ -17,7 +17,8 @@ TOOLS_DIR = ROOT / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from rakuten_html_bulk_editor import run_extract, run_merge
+from rakuten_column_headers import ITEM_CODE_RAKUTEN, PC_COL_RAKUTEN, SP_COL_RAKUTEN
+from rakuten_html_bulk_editor import parse_two_product_block, run_extract, run_merge
 
 IMAGE_PREVIEW_BASE = os.environ.get(
     "RAKUTEN_IMAGE_PREVIEW_BASE",
@@ -46,6 +47,34 @@ def _to_abs_image_url(path_or_url: str) -> str:
     return IMAGE_PREVIEW_BASE.rstrip("/") + "/" + s.lstrip("/")
 
 
+def _resolve_rakuten_col_indices(header: List[str]) -> Optional[Tuple[int, int, int]]:
+    name_to_idx = {name: i for i, name in enumerate(header)}
+    code_i = name_to_idx.get(ITEM_CODE_RAKUTEN)
+    sp_i = name_to_idx.get(SP_COL_RAKUTEN)
+    pc_i = name_to_idx.get(PC_COL_RAKUTEN)
+    if code_i is not None and sp_i is not None and pc_i is not None:
+        return code_i, sp_i, pc_i
+    if len(header) >= 3:
+        return 0, 1, 2
+    return None
+
+
+def _render_image_preview(p1: str, p2: str, p1_name: str = "", p2_name: str = "") -> None:
+    c1, c2 = st.columns(2)
+    with c1:
+        label = f"商品1: {p1_name}" if p1_name else "商品1"
+        st.caption(f"{label} — {p1}" if p1 else label)
+        u1 = _to_abs_image_url(p1)
+        if u1:
+            st.image(u1, use_container_width=True)
+    with c2:
+        label = f"商品2: {p2_name}" if p2_name else "商品2"
+        st.caption(f"{label} — {p2}" if p2 else label)
+        u2 = _to_abs_image_url(p2)
+        if u2:
+            st.image(u2, use_container_width=True)
+
+
 def _preview_csv(data: bytes, title: str) -> None:
     st.subheader(title)
     rows = _read_csv_rows(data)
@@ -57,7 +86,7 @@ def _preview_csv(data: bytes, title: str) -> None:
     st.caption(f"{len(body)} 行 / {len(header)} 列（プレビュー）")
     st.dataframe(body, use_container_width=True, column_config={h: h for h in header})
 
-    # Lightweight image preview for edit-sheet output.
+    # Image preview for flat edit sheet (mae_edit.csv).
     if IMAGE_COLS.issubset(set(header)) and body:
         idx1 = header.index("商品1_画像パス")
         idx2 = header.index("商品2_画像パス")
@@ -65,17 +94,34 @@ def _preview_csv(data: bytes, title: str) -> None:
         for r in body[:20]:
             p1 = r[idx1] if idx1 < len(r) else ""
             p2 = r[idx2] if idx2 < len(r) else ""
-            c1, c2 = st.columns(2)
-            with c1:
-                st.caption(f"商品1: {p1}")
-                u1 = _to_abs_image_url(p1)
-                if u1:
-                    st.image(u1, use_container_width=True)
-            with c2:
-                st.caption(f"商品2: {p2}")
-                u2 = _to_abs_image_url(p2)
-                if u2:
-                    st.image(u2, use_container_width=True)
+            _render_image_preview(p1, p2)
+        return
+
+    # Image preview for Rakuten output (item_ato.csv): parse HTML in SP/PC columns.
+    rakuten_cols = _resolve_rakuten_col_indices(header)
+    if rakuten_cols and body:
+        code_i, sp_i, pc_i = rakuten_cols
+        st.markdown("#### 画像プレビュー（上位20行・HTMLから抽出）")
+        shown = 0
+        for r in body[:20]:
+            if code_i >= len(r):
+                continue
+            code = r[code_i]
+            sp_html = r[sp_i] if sp_i < len(r) else ""
+            pc_html = r[pc_i] if pc_i < len(r) else ""
+            parsed = parse_two_product_block(pc_html) or parse_two_product_block(sp_html)
+            if not parsed:
+                continue
+            st.caption(f"商品管理番号: {code}")
+            _render_image_preview(
+                parsed.p1.img_src,
+                parsed.p2.img_src,
+                parsed.p1.alt,
+                parsed.p2.alt,
+            )
+            shown += 1
+        if shown == 0:
+            st.caption("2商品ブロック（幅50%の表）が見つかる行がありませんでした。")
 
 
 def _run_extract(source_bytes: bytes) -> bytes:
