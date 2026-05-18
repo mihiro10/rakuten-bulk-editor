@@ -25,6 +25,8 @@ IMAGE_PREVIEW_BASE = os.environ.get(
     "https://image.rakuten.co.jp/chikuya/cabinet/",
 )
 IMAGE_COLS = {"商品1_画像パス", "商品2_画像パス"}
+# Bump when deploying so users can confirm Streamlit Cloud picked up the build.
+APP_VERSION = "2026-05-18-v2"
 
 
 def _read_csv_rows(data: bytes, max_rows: int = 200) -> List[List[str]]:
@@ -54,8 +56,6 @@ def _resolve_rakuten_col_indices(header: List[str]) -> Optional[Tuple[int, int, 
     pc_i = name_to_idx.get(PC_COL_RAKUTEN)
     if code_i is not None and sp_i is not None and pc_i is not None:
         return code_i, sp_i, pc_i
-    if len(header) >= 3:
-        return 0, 1, 2
     return None
 
 
@@ -73,6 +73,46 @@ def _render_image_preview(p1: str, p2: str, p1_name: str = "", p2_name: str = ""
         u2 = _to_abs_image_url(p2)
         if u2:
             st.image(u2, use_container_width=True)
+
+
+def _preview_rakuten_html_images(data: bytes, max_items: int = 20) -> None:
+    """Parse SP/PC HTML (full file) and show thumbnails for primary product rows."""
+    rows = _read_csv_rows(data, max_rows=5000)
+    if len(rows) < 2:
+        return
+    header = rows[0]
+    body = rows[1:]
+    rakuten_cols = _resolve_rakuten_col_indices(header)
+    if not rakuten_cols or not body:
+        return
+    code_i, sp_i, pc_i = rakuten_cols
+    st.markdown("#### 画像プレビュー（HTMLから抽出）")
+    shown = 0
+    seen_codes: set[str] = set()
+    for r in body:
+        if shown >= max_items:
+            break
+        if code_i >= len(r):
+            continue
+        code = (r[code_i] or "").strip()
+        if not code or code in seen_codes:
+            continue
+        sp_html = r[sp_i] if sp_i < len(r) else ""
+        pc_html = r[pc_i] if pc_i < len(r) else ""
+        parsed = parse_two_product_block(pc_html) or parse_two_product_block(sp_html)
+        if not parsed:
+            continue
+        seen_codes.add(code)
+        st.caption(f"商品管理番号: {code}")
+        _render_image_preview(
+            parsed.p1.img_src,
+            parsed.p2.img_src,
+            parsed.p1.alt,
+            parsed.p2.alt,
+        )
+        shown += 1
+    if shown == 0:
+        st.caption("2商品ブロック（幅50%の表）が見つかる行がありませんでした。")
 
 
 def _preview_csv(data: bytes, title: str) -> None:
@@ -97,31 +137,8 @@ def _preview_csv(data: bytes, title: str) -> None:
             _render_image_preview(p1, p2)
         return
 
-    # Image preview for Rakuten output (item_ato.csv): parse HTML in SP/PC columns.
-    rakuten_cols = _resolve_rakuten_col_indices(header)
-    if rakuten_cols and body:
-        code_i, sp_i, pc_i = rakuten_cols
-        st.markdown("#### 画像プレビュー（上位20行・HTMLから抽出）")
-        shown = 0
-        for r in body[:20]:
-            if code_i >= len(r):
-                continue
-            code = r[code_i]
-            sp_html = r[sp_i] if sp_i < len(r) else ""
-            pc_html = r[pc_i] if pc_i < len(r) else ""
-            parsed = parse_two_product_block(pc_html) or parse_two_product_block(sp_html)
-            if not parsed:
-                continue
-            st.caption(f"商品管理番号: {code}")
-            _render_image_preview(
-                parsed.p1.img_src,
-                parsed.p2.img_src,
-                parsed.p1.alt,
-                parsed.p2.alt,
-            )
-            shown += 1
-        if shown == 0:
-            st.caption("2商品ブロック（幅50%の表）が見つかる行がありませんでした。")
+    if _resolve_rakuten_col_indices(header):
+        _preview_rakuten_html_images(data)
 
 
 def _run_extract(source_bytes: bytes) -> bytes:
@@ -148,6 +165,7 @@ def _run_merge(source_bytes: bytes, edit_bytes: bytes) -> bytes:
 
 def main() -> None:
     st.set_page_config(page_title="楽天 商品説明 一括編集ツール", layout="wide")
+    st.sidebar.caption(f"バージョン: {APP_VERSION}")
     st.title("楽天 商品説明 一括編集ツール")
     st.write("`item_mae.csv` から編集用CSVを作成し、編集後CSVを `item_ato.csv` に反映します。")
     st.info(
