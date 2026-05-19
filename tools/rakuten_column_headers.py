@@ -12,6 +12,10 @@ from typing import Dict, List, Tuple
 RAKUTEN_UPLOAD_NAME_PREFIX = "normal-item_"
 DEFAULT_RAKUTEN_UPLOAD_SUFFIX = "upload"
 
+# Rakuten RMS download (before 抽出 / マージ source)
+RAKUTEN_DOWNLOAD_GLOB = "dl-normal-item_*.csv"
+RAKUTEN_DOWNLOAD_EXAMPLE = "dl-normal-item_20260519091441.csv"
+
 # Extract step output (edit in Excel/Sheets) — not the Rakuten dl-normal-item_*.csv download name
 EXTRACT_EDIT_BASENAME = "mae_edit"
 EXTRACT_EDIT_FILENAME = f"{EXTRACT_EDIT_BASENAME}.csv"
@@ -120,6 +124,11 @@ def extract_fieldnames_ja() -> List[str]:
 def extract_edit_filename() -> str:
     """Flat edit sheet after 抽出 (UTF-8). Always mae_edit.csv."""
     return EXTRACT_EDIT_FILENAME
+
+
+def rakuten_source_csv_label() -> str:
+    """File uploader label for the original Rakuten download CSV."""
+    return f"\u5143\u0043\u0053\u0056\uff08{RAKUTEN_DOWNLOAD_GLOB}\uff09"
 
 
 def rakuten_upload_filename(suffix: str = DEFAULT_RAKUTEN_UPLOAD_SUFFIX) -> str:
