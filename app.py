@@ -26,11 +26,21 @@ IMAGE_PREVIEW_BASE = os.environ.get(
 )
 IMAGE_COLS = {"商品1_画像パス", "商品2_画像パス"}
 # Bump when deploying so users can confirm Streamlit Cloud picked up the build.
-APP_VERSION = "2026-05-18-v2"
+APP_VERSION = "2026-05-19-preview-encoding"
+
+
+def _decode_csv_bytes(data: bytes) -> str:
+    """Match Rakuten + tool output: UTF-8 (edit sheet) or Shift_JIS (merge upload file)."""
+    for enc in ("utf-8-sig", "cp932", "shift_jis"):
+        try:
+            return data.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace")
 
 
 def _read_csv_rows(data: bytes, max_rows: int = 200) -> List[List[str]]:
-    text = data.decode("utf-8-sig", errors="replace")
+    text = _decode_csv_bytes(data)
     out: List[List[str]] = []
     for i, row in enumerate(csv.reader(io.StringIO(text))):
         if i >= max_rows:
