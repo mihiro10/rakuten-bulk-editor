@@ -17,7 +17,7 @@ TOOLS_DIR = ROOT / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from rakuten_column_headers import ITEM_CODE_RAKUTEN, PC_COL_RAKUTEN, SP_COL_RAKUTEN
+from rakuten_column_headers import H_CODE, ITEM_CODE_RAKUTEN, PC_COL_RAKUTEN, SP_COL_RAKUTEN
 from rakuten_html_bulk_editor import parse_two_product_block, run_extract, run_merge
 
 IMAGE_PREVIEW_BASE = os.environ.get(
@@ -26,7 +26,7 @@ IMAGE_PREVIEW_BASE = os.environ.get(
 )
 IMAGE_COLS = {"商品1_画像パス", "商品2_画像パス"}
 # Bump when deploying so users can confirm Streamlit Cloud picked up the build.
-APP_VERSION = "2026-05-19-preview-encoding"
+APP_VERSION = "2026-05-19-img-mgmt-code"
 
 
 def _decode_csv_bytes(data: bytes) -> str:
@@ -69,7 +69,17 @@ def _resolve_rakuten_col_indices(header: List[str]) -> Optional[Tuple[int, int, 
     return None
 
 
-def _render_image_preview(p1: str, p2: str, p1_name: str = "", p2_name: str = "") -> None:
+def _render_image_preview(
+    p1: str,
+    p2: str,
+    p1_name: str = "",
+    p2_name: str = "",
+    *,
+    management_code: str = "",
+) -> None:
+    mc = (management_code or "").strip()
+    if mc:
+        st.caption(f"商品管理番号: {mc}")
     c1, c2 = st.columns(2)
     with c1:
         label = f"商品1: {p1_name}" if p1_name else "商品1"
@@ -113,12 +123,12 @@ def _preview_rakuten_html_images(data: bytes, max_items: int = 20) -> None:
         if not parsed:
             continue
         seen_codes.add(code)
-        st.caption(f"商品管理番号: {code}")
         _render_image_preview(
             parsed.p1.img_src,
             parsed.p2.img_src,
             parsed.p1.alt,
             parsed.p2.alt,
+            management_code=code,
         )
         shown += 1
     if shown == 0:
@@ -140,11 +150,29 @@ def _preview_csv(data: bytes, title: str) -> None:
     if IMAGE_COLS.issubset(set(header)) and body:
         idx1 = header.index("商品1_画像パス")
         idx2 = header.index("商品2_画像パス")
+        code_idx = header.index(H_CODE) if H_CODE in header else None
+        idx1_name = header.index("商品1_商品名") if "商品1_商品名" in header else None
+        idx2_name = header.index("商品2_商品名") if "商品2_商品名" in header else None
         st.markdown("#### 画像プレビュー（上位20行）")
         for r in body[:20]:
             p1 = r[idx1] if idx1 < len(r) else ""
             p2 = r[idx2] if idx2 < len(r) else ""
-            _render_image_preview(p1, p2)
+            n1 = (
+                r[idx1_name].strip()
+                if idx1_name is not None and idx1_name < len(r)
+                else ""
+            )
+            n2 = (
+                r[idx2_name].strip()
+                if idx2_name is not None and idx2_name < len(r)
+                else ""
+            )
+            mgmt = (
+                r[code_idx].strip()
+                if code_idx is not None and code_idx < len(r)
+                else ""
+            )
+            _render_image_preview(p1, p2, n1, n2, management_code=mgmt)
         return
 
     if _resolve_rakuten_col_indices(header):
