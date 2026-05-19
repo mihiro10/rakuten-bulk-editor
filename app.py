@@ -17,7 +17,18 @@ TOOLS_DIR = ROOT / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from rakuten_column_headers import H_CODE, ITEM_CODE_RAKUTEN, PC_COL_RAKUTEN, SP_COL_RAKUTEN
+from rakuten_column_headers import (
+    DEFAULT_RAKUTEN_UPLOAD_SUFFIX,
+    H_CODE,
+    H_P1_CODE,
+    H_P1_NAME,
+    H_P2_CODE,
+    H_P2_NAME,
+    ITEM_CODE_RAKUTEN,
+    PC_COL_RAKUTEN,
+    SP_COL_RAKUTEN,
+    rakuten_upload_filename,
+)
 from rakuten_html_bulk_editor import parse_two_product_block, run_extract, run_merge
 
 IMAGE_PREVIEW_BASE = os.environ.get(
@@ -26,7 +37,7 @@ IMAGE_PREVIEW_BASE = os.environ.get(
 )
 IMAGE_COLS = {"商品1_画像パス", "商品2_画像パス"}
 # Bump when deploying so users can confirm Streamlit Cloud picked up the build.
-APP_VERSION = "2026-05-19-img-mgmt-code"
+APP_VERSION = "2026-05-19-preview-labels"
 
 
 def _decode_csv_bytes(data: bytes) -> str:
@@ -69,6 +80,31 @@ def _resolve_rakuten_col_indices(header: List[str]) -> Optional[Tuple[int, int, 
     return None
 
 
+def _href_item_code(href: str) -> str:
+    s = (href or "").strip().rstrip("/")
+    if not s:
+        return ""
+    return s.rsplit("/", 1)[-1].strip()
+
+
+def _slot_preview_lines(
+    slot_label: str,
+    item_code: str,
+    item_name: str,
+    img_ref: str,
+) -> str:
+    lines = [f"**{slot_label}**"]
+    code = (item_code or "").strip()
+    name = (item_name or "").strip()
+    if code:
+        lines.append(f"商品管理番号: {code}")
+    if name:
+        lines.append(f"商品名: {name}")
+    if img_ref and not code and not name:
+        lines.append(f"画像: {img_ref[:80]}…" if len(img_ref) > 80 else f"画像: {img_ref}")
+    return "\n\n".join(lines)
+
+
 def _render_image_preview(
     p1: str,
     p2: str,
@@ -76,20 +112,20 @@ def _render_image_preview(
     p2_name: str = "",
     *,
     management_code: str = "",
+    p1_code: str = "",
+    p2_code: str = "",
 ) -> None:
     mc = (management_code or "").strip()
     if mc:
-        st.caption(f"商品管理番号: {mc}")
+        st.markdown(f"**商品管理番号（親）:** {mc}")
     c1, c2 = st.columns(2)
     with c1:
-        label = f"商品1: {p1_name}" if p1_name else "商品1"
-        st.caption(f"{label} — {p1}" if p1 else label)
+        st.markdown(_slot_preview_lines("商品1", p1_code, p1_name, p1))
         u1 = _to_abs_image_url(p1)
         if u1:
             st.image(u1, use_container_width=True)
     with c2:
-        label = f"商品2: {p2_name}" if p2_name else "商品2"
-        st.caption(f"{label} — {p2}" if p2 else label)
+        st.markdown(_slot_preview_lines("商品2", p2_code, p2_name, p2))
         u2 = _to_abs_image_url(p2)
         if u2:
             st.image(u2, use_container_width=True)
@@ -129,6 +165,8 @@ def _preview_rakuten_html_images(data: bytes, max_items: int = 20) -> None:
             parsed.p1.alt,
             parsed.p2.alt,
             management_code=code,
+            p1_code=_href_item_code(parsed.p1.href),
+            p2_code=_href_item_code(parsed.p2.href),
         )
         shown += 1
     if shown == 0:
@@ -151,12 +189,24 @@ def _preview_csv(data: bytes, title: str) -> None:
         idx1 = header.index("商品1_画像パス")
         idx2 = header.index("商品2_画像パス")
         code_idx = header.index(H_CODE) if H_CODE in header else None
-        idx1_name = header.index("商品1_商品名") if "商品1_商品名" in header else None
-        idx2_name = header.index("商品2_商品名") if "商品2_商品名" in header else None
+        idx1_code = header.index(H_P1_CODE) if H_P1_CODE in header else None
+        idx2_code = header.index(H_P2_CODE) if H_P2_CODE in header else None
+        idx1_name = header.index(H_P1_NAME) if H_P1_NAME in header else None
+        idx2_name = header.index(H_P2_NAME) if H_P2_NAME in header else None
         st.markdown("#### 画像プレビュー（上位20行）")
         for r in body[:20]:
             p1 = r[idx1] if idx1 < len(r) else ""
             p2 = r[idx2] if idx2 < len(r) else ""
+            c1 = (
+                r[idx1_code].strip()
+                if idx1_code is not None and idx1_code < len(r)
+                else ""
+            )
+            c2 = (
+                r[idx2_code].strip()
+                if idx2_code is not None and idx2_code < len(r)
+                else ""
+            )
             n1 = (
                 r[idx1_name].strip()
                 if idx1_name is not None and idx1_name < len(r)
@@ -172,7 +222,15 @@ def _preview_csv(data: bytes, title: str) -> None:
                 if code_idx is not None and code_idx < len(r)
                 else ""
             )
-            _render_image_preview(p1, p2, n1, n2, management_code=mgmt)
+            _render_image_preview(
+                p1,
+                p2,
+                n1,
+                n2,
+                management_code=mgmt,
+                p1_code=c1,
+                p2_code=c2,
+            )
         return
 
     if _resolve_rakuten_col_indices(header):
@@ -208,7 +266,7 @@ def main() -> None:
     st.write("`item_mae.csv` から編集用CSVを作成し、編集後CSVを `item_ato.csv` に反映します。")
     st.info(
         "使い方: ①「抽出」で編集用CSVを作成 → ②Googleスプレッドシート/Excelで編集 → "
-        "③「マージ」で `item_ato.csv` を作成"
+        "③「マージ」で楽天アップロード用CSV（`normal-item_*.csv`）を作成"
     )
 
     tab_extract, tab_merge = st.tabs(["1) 抽出（編集用CSV作成）", "2) マージ（反映）"])
@@ -232,21 +290,32 @@ def main() -> None:
                 st.error(f"抽出に失敗しました: {exc}")
 
     with tab_merge:
-        st.header("マージ: item_mae.csv + 編集済みCSV -> item_ato.csv")
+        st.header("マージ: item_mae.csv + 編集済みCSV -> 楽天アップロード用CSV")
         st.caption(
             "元CSVと、編集した `mae_edit.csv` の2つを選んでください。"
-            " 出力は楽天アップロード用に Shift_JIS（元CSVと同じ文字コード）です。"
+            " 出力は Shift_JIS（元CSVと同じ文字コード）、ファイル名は `normal-item_○○.csv` 形式です。"
         )
+        upload_suffix = st.text_input(
+            "アップロード用ファイル名（normal-item_ の後ろ）",
+            value=DEFAULT_RAKUTEN_UPLOAD_SUFFIX,
+            help="例: upload → normal-item_upload.csv（英数字・ハイフン・アンダースコアのみ）",
+            key="merge_upload_suffix",
+        )
+        upload_name = rakuten_upload_filename(upload_suffix)
+        st.caption(f"ダウンロード名: **{upload_name}**")
         src_file = st.file_uploader("元CSV（item_mae.csv）", type=["csv"], key="merge_src")
         edit_file = st.file_uploader("編集済みCSV（mae_edit.csv）", type=["csv"], key="merge_edit")
         if st.button("マージを実行", type="primary", disabled=(src_file is None or edit_file is None)):
             try:
                 out = _run_merge(src_file.getvalue(), edit_file.getvalue())
-                st.success("マージが完了しました。Shift_JIS形式です。そのまま楽天にアップロードできます。")
+                st.success(
+                    f"マージが完了しました。Shift_JIS形式の `{upload_name}` です。"
+                    "そのまま楽天にアップロードできます。"
+                )
                 st.download_button(
-                    "item_ato.csv をダウンロード",
+                    f"{upload_name} をダウンロード",
                     data=out,
-                    file_name="item_ato.csv",
+                    file_name=upload_name,
                     mime="text/csv",
                 )
                 _preview_csv(out, "マージ結果プレビュー")

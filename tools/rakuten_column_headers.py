@@ -5,7 +5,12 @@ this module is ASCII-only via \\u escapes).
 """
 from __future__ import annotations
 
+import re
 from typing import Dict, List, Tuple
+
+# Rakuten bulk upload: filename must start with normal-item_ (e.g. normal-item_upload.csv)
+RAKUTEN_UPLOAD_NAME_PREFIX = "normal-item_"
+DEFAULT_RAKUTEN_UPLOAD_SUFFIX = "upload"
 
 # --- Rakuten source CSV column names (must match download) ---
 # 商品管理番号（商品URL）
@@ -106,3 +111,10 @@ def normalize_edit_row(row: Dict[str, str]) -> Dict[str, str]:
 
 def extract_fieldnames_ja() -> List[str]:
     return [h for _k, h in EXTRACT_ORDER]
+
+
+def rakuten_upload_filename(suffix: str = DEFAULT_RAKUTEN_UPLOAD_SUFFIX) -> str:
+    """Build a Rakuten-compatible upload CSV name: normal-item_<suffix>.csv"""
+    raw = (suffix or DEFAULT_RAKUTEN_UPLOAD_SUFFIX).strip()
+    safe = re.sub(r"[^a-zA-Z0-9_-]", "", raw) or DEFAULT_RAKUTEN_UPLOAD_SUFFIX
+    return f"{RAKUTEN_UPLOAD_NAME_PREFIX}{safe}.csv"

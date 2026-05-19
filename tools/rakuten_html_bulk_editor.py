@@ -101,11 +101,18 @@ def parse_two_product_block(html: str) -> Optional[ParsedBlock]:
             return None
 
         img_tag = img_match.group(0)
-        alt_match = re.search(r"\salt=\"([^\"]*)\"", img_tag, re.IGNORECASE | re.DOTALL)
+        alt_match = re.search(
+            r'\balt\s*=\s*(?:"([^"]*)"|\'([^\']*)\')',
+            img_tag,
+            re.IGNORECASE | re.DOTALL,
+        )
+        alt = ""
+        if alt_match:
+            alt = (alt_match.group(1) or alt_match.group(2) or "").strip()
         return ProductSlot(
             href=href_match.group(1),
             img_src=img_match.group(1),
-            alt=alt_match.group(1) if alt_match else "",
+            alt=alt,
         )
 
     p1 = parse_slot(td_matches[0])
@@ -494,7 +501,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p_merge = sub.add_parser("merge", help="Merge edited CSV back into Rakuten CSV.")
     p_merge.add_argument("--input", required=True, type=Path, help="Original source Rakuten CSV")
     p_merge.add_argument("--edit", required=True, type=Path, help="Edited extract CSV from Excel")
-    p_merge.add_argument("--output", required=True, type=Path, help="Merged Rakuten CSV output")
+    p_merge.add_argument(
+        "--output",
+        required=True,
+        type=Path,
+        help="Merged Rakuten CSV (use normal-item_*.csv for RMS upload, e.g. normal-item_upload.csv)",
+    )
     return parser
 
 

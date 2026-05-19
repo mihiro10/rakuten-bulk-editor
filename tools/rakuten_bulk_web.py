@@ -22,6 +22,7 @@ if str(_TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(_TOOLS_DIR))
 
 import rakuten_web_ja as J
+from rakuten_column_headers import rakuten_upload_filename
 from rakuten_html_bulk_editor import run_extract, run_merge
 
 _OUT_STORE: dict[str, tuple[str, bytes, float]] = {}
@@ -451,10 +452,11 @@ a{{color:#1565c0;}}
                     edit_p.write_bytes(edited)
                     run_merge(src_p, edit_p, out_p)
                     out_data = out_p.read_bytes()
-                token = _store_output("item_ato.csv", out_data)
+                upload_name = rakuten_upload_filename()
+                token = _store_output(upload_name, out_data)
                 page = _result_page(
                     J.OK_MERGE_TITLE,
-                    "item_ato.csv",
+                    upload_name,
                     token,
                     J.OK_MERGE_MSG,
                     out_data,
