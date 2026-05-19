@@ -6,7 +6,8 @@ this module is ASCII-only via \\u escapes).
 from __future__ import annotations
 
 import re
-from typing import Dict, List, Tuple
+from datetime import date
+from typing import Dict, List, Optional, Tuple
 
 # Rakuten bulk upload: filename must start with normal-item_ (e.g. normal-item_upload.csv)
 RAKUTEN_UPLOAD_NAME_PREFIX = "normal-item_"
@@ -18,7 +19,7 @@ RAKUTEN_DOWNLOAD_EXAMPLE = "dl-normal-item_20260519091441.csv"
 
 # Extract step output (edit in Excel/Sheets) — not the Rakuten dl-normal-item_*.csv download name
 EXTRACT_EDIT_BASENAME = "mae_edit"
-EXTRACT_EDIT_FILENAME = f"{EXTRACT_EDIT_BASENAME}.csv"
+EXTRACT_EDIT_GLOB = f"{EXTRACT_EDIT_BASENAME}_*.csv"
 
 # --- Rakuten source CSV column names (must match download) ---
 # 商品管理番号（商品URL）
@@ -121,9 +122,10 @@ def extract_fieldnames_ja() -> List[str]:
     return [h for _k, h in EXTRACT_ORDER]
 
 
-def extract_edit_filename() -> str:
-    """Flat edit sheet after 抽出 (UTF-8). Always mae_edit.csv."""
-    return EXTRACT_EDIT_FILENAME
+def extract_edit_filename(for_date: Optional[date] = None) -> str:
+    """Flat edit sheet after 抽出 (UTF-8), e.g. mae_edit_20260519.csv."""
+    d = for_date or date.today()
+    return f"{EXTRACT_EDIT_BASENAME}_{d.strftime('%Y%m%d')}.csv"
 
 
 def rakuten_source_csv_label() -> str:

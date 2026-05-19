@@ -27,6 +27,7 @@ from rakuten_column_headers import (
     ITEM_CODE_RAKUTEN,
     PC_COL_RAKUTEN,
     SP_COL_RAKUTEN,
+    EXTRACT_EDIT_GLOB,
     extract_edit_filename,
     rakuten_source_csv_label,
     rakuten_upload_filename,
@@ -40,7 +41,7 @@ IMAGE_PREVIEW_BASE = os.environ.get(
 )
 IMAGE_COLS = {"商品1_画像パス", "商品2_画像パス"}
 # Bump when deploying so users can confirm Streamlit Cloud picked up the build.
-APP_VERSION = "2026-05-19-merge-dl-source"
+APP_VERSION = "2026-05-19-mae-edit-date"
 
 
 def _decode_csv_bytes(data: bytes) -> str:
@@ -284,7 +285,7 @@ def main() -> None:
         st.header(f"抽出: 楽天CSV → {edit_name}")
         st.caption(
             f"楽天からダウンロードした CSV（例: `{RAKUTEN_DOWNLOAD_EXAMPLE}`）を選び、"
-            f"抽出後は必ず **`{edit_name}`** という名前で保存してください。"
+            f"抽出後の保存名（今日）: **`{edit_name}`**"
         )
         src_file = st.file_uploader(
             rakuten_src_label,
@@ -295,6 +296,7 @@ def main() -> None:
             try:
                 out = _run_extract(src_file.getvalue())
                 st.session_state["extract_csv_bytes"] = out
+                st.session_state["extract_edit_filename"] = edit_name
                 st.success(f"抽出が完了しました。ダウンロード名は `{edit_name}` です。")
             except Exception as exc:
                 st.session_state.pop("extract_csv_bytes", None)
@@ -302,11 +304,12 @@ def main() -> None:
 
         extract_out = st.session_state.get("extract_csv_bytes")
         if extract_out:
-            st.markdown(f"**保存ファイル名:** `{edit_name}`")
+            dl_name = st.session_state.get("extract_edit_filename", edit_name)
+            st.markdown(f"**保存ファイル名:** `{dl_name}`")
             st.download_button(
-                f"{edit_name} をダウンロード",
+                f"{dl_name} をダウンロード",
                 data=extract_out,
-                file_name=edit_name,
+                file_name=dl_name,
                 mime="text/csv",
                 key="download_extract_mae_edit",
             )
@@ -316,7 +319,7 @@ def main() -> None:
         st.header(f"マージ: 楽天CSV + {edit_name} → 楽天アップロード用CSV")
         st.caption(
             f"**元CSV** は抽出と同じ楽天ダウンロード（例: `{RAKUTEN_DOWNLOAD_EXAMPLE}`）。"
-            f"**編集済み** は `{edit_name}`。"
+            f"**編集済み** は `{EXTRACT_EDIT_GLOB}`（例: `{edit_name}`）。"
             " 出力は Shift_JIS（元CSVと同じ文字コード）、ファイル名は `normal-item_○○.csv` 形式です。"
         )
         upload_suffix = st.text_input(
@@ -329,7 +332,7 @@ def main() -> None:
         st.caption(f"ダウンロード名: **{upload_name}**")
         src_file = st.file_uploader(rakuten_src_label, type=["csv"], key="merge_src")
         edit_file = st.file_uploader(
-            f"編集済みCSV（{edit_name}）",
+            f"編集済みCSV（{EXTRACT_EDIT_GLOB}）",
             type=["csv"],
             key="merge_edit",
         )
