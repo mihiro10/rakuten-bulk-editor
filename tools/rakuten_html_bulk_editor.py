@@ -164,7 +164,7 @@ def _rebuild_block_preserve_format(block_html: str, p1: ProductSlot, p2: Product
     return out
 
 
-def _open_csv_reader_with_fallback(path: Path) -> Tuple[List[Dict[str, str]], List[str]]:
+def _open_csv_reader_with_fallback(path: Path) -> Tuple[List[Dict[str, str]], List[str], str]:
     encodings = ["utf-8-sig", "cp932", "shift_jis"]
     last_error: Optional[Exception] = None
     for enc in encodings:
@@ -175,7 +175,7 @@ def _open_csv_reader_with_fallback(path: Path) -> Tuple[List[Dict[str, str]], Li
                     raise ValueError("Input CSV has no header.")
                 fieldnames = list(reader.fieldnames)
                 rows = list(reader)
-            return rows, fieldnames
+            return rows, fieldnames, enc
         except UnicodeDecodeError as exc:
             last_error = exc
     if last_error:
@@ -183,14 +183,27 @@ def _open_csv_reader_with_fallback(path: Path) -> Tuple[List[Dict[str, str]], Li
     raise ValueError("Failed to open CSV.")
 
 
-def read_csv_rows(path: Path) -> Tuple[List[Dict[str, str]], List[str], str, str, str]:
-    rows, fieldnames = _open_csv_reader_with_fallback(path)
+def _rakuten_upload_encoding(source_encoding: str) -> str:
+    """Rakuten bulk upload expects Shift_JIS (cp932 on Windows/Python)."""
+    if source_encoding in ("cp932", "shift_jis"):
+        return "cp932"
+    return source_encoding
+
+
+def read_csv_rows(path: Path) -> Tuple[List[Dict[str, str]], List[str], str, str, str, str]:
+    rows, fieldnames, encoding = _open_csv_reader_with_fallback(path)
     code_col, sp_col, pc_col = _find_columns(fieldnames)
-    return rows, fieldnames, code_col, sp_col, pc_col
+    return rows, fieldnames, code_col, sp_col, pc_col, encoding
 
 
-def write_csv_rows(path: Path, fieldnames: List[str], rows: List[Dict[str, str]]) -> None:
-    with path.open("w", encoding="utf-8-sig", newline="") as f:
+def write_csv_rows(
+    path: Path,
+    fieldnames: List[str],
+    rows: List[Dict[str, str]],
+    encoding: str = "utf-8-sig",
+) -> None:
+    out_enc = _rakuten_upload_encoding(encoding)
+    with path.open("w", encoding=out_enc, newline="", errors="replace") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
@@ -318,7 +331,7 @@ def _extract_edit_values(source: Optional[ParsedBlock], url_bases: Dict[str, str
 
 
 def run_extract(input_csv: Path, output_csv: Path) -> int:
-    rows, _, code_col, sp_col, pc_col = read_csv_rows(input_csv)
+    rows, _, code_col, sp_col, pc_col, _encoding = read_csv_rows(input_csv)
     primary_map = find_primary_rows(rows, code_col, sp_col, pc_col)
     url_bases = _collect_url_bases(rows, code_col, sp_col, pc_col)
 
@@ -409,7 +422,7 @@ def _build_channel_from_edit(
 
 
 def run_merge(input_csv: Path, edit_csv: Path, output_csv: Path) -> int:
-    rows, fieldnames, code_col, sp_col, pc_col = read_csv_rows(input_csv)
+    rows, fieldnames, code_col, sp_col, pc_col, source_encoding = read_csv_rows(input_csv)
     primary_map = find_primary_rows(rows, code_col, sp_col, pc_col)
     url_bases = _collect_url_bases(rows, code_col, sp_col, pc_col)
 
@@ -457,9 +470,9 @@ def run_merge(input_csv: Path, edit_csv: Path, output_csv: Path) -> int:
         else:
             skipped += 1
 
-    write_csv_rows(output_csv, fieldnames, rows)
+    write_csv_rows(output_csv, fieldnames, rows, encoding=source_encoding)
 
-    print(f"Merge complete: {output_csv}")
+    print(f"Merge complete: {output_csv} (encoding={_rakuten_upload_encoding(source_encoding)})")
     print(f"Updated items: {updated}")
     print(f"Skipped (no edit data): {skipped}")
     if missing_codes:

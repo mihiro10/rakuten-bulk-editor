@@ -195,13 +195,16 @@ def main() -> None:
 
     with tab_merge:
         st.header("マージ: item_mae.csv + 編集済みCSV -> item_ato.csv")
-        st.caption("元CSVと、編集した `mae_edit.csv` の2つを選んでください。")
+        st.caption(
+            "元CSVと、編集した `mae_edit.csv` の2つを選んでください。"
+            " 出力は楽天アップロード用に Shift_JIS（元CSVと同じ文字コード）です。"
+        )
         src_file = st.file_uploader("元CSV（item_mae.csv）", type=["csv"], key="merge_src")
         edit_file = st.file_uploader("編集済みCSV（mae_edit.csv）", type=["csv"], key="merge_edit")
         if st.button("マージを実行", type="primary", disabled=(src_file is None or edit_file is None)):
             try:
                 out = _run_merge(src_file.getvalue(), edit_file.getvalue())
-                st.success("マージが完了しました。")
+                st.success("マージが完了しました。Shift_JIS形式です。そのまま楽天にアップロードできます。")
                 st.download_button(
                     "item_ato.csv をダウンロード",
                     data=out,
