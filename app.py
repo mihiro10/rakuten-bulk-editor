@@ -27,6 +27,7 @@ from rakuten_column_headers import (
     ITEM_CODE_RAKUTEN,
     PC_COL_RAKUTEN,
     SP_COL_RAKUTEN,
+    extract_edit_filename,
     rakuten_upload_filename,
 )
 from rakuten_html_bulk_editor import parse_two_product_block, run_extract, run_merge
@@ -37,7 +38,7 @@ IMAGE_PREVIEW_BASE = os.environ.get(
 )
 IMAGE_COLS = {"商品1_画像パス", "商品2_画像パス"}
 # Bump when deploying so users can confirm Streamlit Cloud picked up the build.
-APP_VERSION = "2026-05-19-preview-labels"
+APP_VERSION = "2026-05-19-mae-edit-filename"
 
 
 def _decode_csv_bytes(data: bytes) -> str:
@@ -241,7 +242,7 @@ def _run_extract(source_bytes: bytes) -> bytes:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         src = tmp / "item_mae.csv"
-        out = tmp / "mae_edit.csv"
+        out = tmp / extract_edit_filename()
         src.write_bytes(source_bytes)
         run_extract(src, out)
         return out.read_bytes()
@@ -251,7 +252,7 @@ def _run_merge(source_bytes: bytes, edit_bytes: bytes) -> bytes:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         src = tmp / "item_mae.csv"
-        edit = tmp / "mae_edit.csv"
+        edit = tmp / extract_edit_filename()
         out = tmp / "item_ato.csv"
         src.write_bytes(source_bytes)
         edit.write_bytes(edit_bytes)
@@ -271,28 +272,44 @@ def main() -> None:
 
     tab_extract, tab_merge = st.tabs(["1) 抽出（編集用CSV作成）", "2) マージ（反映）"])
 
+    edit_name = extract_edit_filename()
+
     with tab_extract:
-        st.header("抽出: item_mae.csv -> mae_edit.csv")
-        st.caption("楽天からダウンロードした `item_mae.csv` を選んでください。")
-        src_file = st.file_uploader("元CSV（item_mae.csv）", type=["csv"], key="extract_src")
+        st.header(f"抽出: 楽天CSV → {edit_name}")
+        st.caption(
+            "楽天からダウンロードした CSV（例: `dl-normal-item_20260519091441.csv`）を選び、"
+            f"抽出後は必ず **`{edit_name}`** という名前で保存してください。"
+        )
+        src_file = st.file_uploader(
+            "元CSV（dl-normal-item_*.csv など）",
+            type=["csv"],
+            key="extract_src",
+        )
         if st.button("抽出を実行", type="primary", disabled=src_file is None):
             try:
                 out = _run_extract(src_file.getvalue())
-                st.success("抽出が完了しました。")
-                st.download_button(
-                    "mae_edit.csv をダウンロード",
-                    data=out,
-                    file_name="mae_edit.csv",
-                    mime="text/csv",
-                )
-                _preview_csv(out, "抽出結果プレビュー")
+                st.session_state["extract_csv_bytes"] = out
+                st.success(f"抽出が完了しました。ダウンロード名は `{edit_name}` です。")
             except Exception as exc:
+                st.session_state.pop("extract_csv_bytes", None)
                 st.error(f"抽出に失敗しました: {exc}")
+
+        extract_out = st.session_state.get("extract_csv_bytes")
+        if extract_out:
+            st.markdown(f"**保存ファイル名:** `{edit_name}`")
+            st.download_button(
+                f"{edit_name} をダウンロード",
+                data=extract_out,
+                file_name=edit_name,
+                mime="text/csv",
+                key="download_extract_mae_edit",
+            )
+            _preview_csv(extract_out, "抽出結果プレビュー")
 
     with tab_merge:
         st.header("マージ: item_mae.csv + 編集済みCSV -> 楽天アップロード用CSV")
         st.caption(
-            "元CSVと、編集した `mae_edit.csv` の2つを選んでください。"
+            f"元CSVと、編集した `{edit_name}` の2つを選んでください。"
             " 出力は Shift_JIS（元CSVと同じ文字コード）、ファイル名は `normal-item_○○.csv` 形式です。"
         )
         upload_suffix = st.text_input(
@@ -304,7 +321,11 @@ def main() -> None:
         upload_name = rakuten_upload_filename(upload_suffix)
         st.caption(f"ダウンロード名: **{upload_name}**")
         src_file = st.file_uploader("元CSV（item_mae.csv）", type=["csv"], key="merge_src")
-        edit_file = st.file_uploader("編集済みCSV（mae_edit.csv）", type=["csv"], key="merge_edit")
+        edit_file = st.file_uploader(
+            f"編集済みCSV（{edit_name}）",
+            type=["csv"],
+            key="merge_edit",
+        )
         if st.button("マージを実行", type="primary", disabled=(src_file is None or edit_file is None)):
             try:
                 out = _run_merge(src_file.getvalue(), edit_file.getvalue())
@@ -317,6 +338,7 @@ def main() -> None:
                     data=out,
                     file_name=upload_name,
                     mime="text/csv",
+                    key="download_merge_upload",
                 )
                 _preview_csv(out, "マージ結果プレビュー")
             except Exception as exc:

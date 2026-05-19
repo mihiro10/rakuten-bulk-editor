@@ -16,7 +16,7 @@ If you use **Web Service** instead of Blueprint:
 
 - Runtime: `Python`
 - Build command: *(empty)*
-- Start command: `python3 tools/rakuten_bulk_web.py`
+- Start command: `streamlit run app.py --server.port=$PORT --server.address=0.0.0.0 --server.headless=true`
 
 ## 3) Deploy
 

@@ -5,7 +5,7 @@ services:
     plan: free
     autoDeploy: true
     buildCommand: ""
-    startCommand: python3 tools/rakuten_bulk_web.py
+    startCommand: streamlit run app.py --server.port=$PORT --server.address=0.0.0.0 --server.headless=true
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9

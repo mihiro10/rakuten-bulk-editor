@@ -12,6 +12,10 @@ from typing import Dict, List, Tuple
 RAKUTEN_UPLOAD_NAME_PREFIX = "normal-item_"
 DEFAULT_RAKUTEN_UPLOAD_SUFFIX = "upload"
 
+# Extract step output (edit in Excel/Sheets) — not the Rakuten dl-normal-item_*.csv download name
+EXTRACT_EDIT_BASENAME = "mae_edit"
+EXTRACT_EDIT_FILENAME = f"{EXTRACT_EDIT_BASENAME}.csv"
+
 # --- Rakuten source CSV column names (must match download) ---
 # 商品管理番号（商品URL）
 ITEM_CODE_RAKUTEN = "\u5546\u54c1\u7ba1\u7406\u756a\u53f7\uff08\u5546\u54c1\u0055\u0052\u004c\uff09"
@@ -111,6 +115,11 @@ def normalize_edit_row(row: Dict[str, str]) -> Dict[str, str]:
 
 def extract_fieldnames_ja() -> List[str]:
     return [h for _k, h in EXTRACT_ORDER]
+
+
+def extract_edit_filename() -> str:
+    """Flat edit sheet after 抽出 (UTF-8). Always mae_edit.csv."""
+    return EXTRACT_EDIT_FILENAME
 
 
 def rakuten_upload_filename(suffix: str = DEFAULT_RAKUTEN_UPLOAD_SUFFIX) -> str:

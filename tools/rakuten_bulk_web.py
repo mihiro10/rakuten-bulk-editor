@@ -22,7 +22,7 @@ if str(_TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(_TOOLS_DIR))
 
 import rakuten_web_ja as J
-from rakuten_column_headers import rakuten_upload_filename
+from rakuten_column_headers import extract_edit_filename, rakuten_upload_filename
 from rakuten_html_bulk_editor import run_extract, run_merge
 
 _OUT_STORE: dict[str, tuple[str, bytes, float]] = {}
@@ -300,7 +300,7 @@ def _result_page(
     <p><strong>{html.escape(success_msg)}</strong></p>
     <p>{J.RES_FILE_LABEL} <code>{html.escape(filename)}</code></p>
     <p>
-      <a class="btn" href="{html.escape(download_url)}" download>{html.escape(filename)}{J.RES_DL}</a>
+      <a class="btn" href="{html.escape(download_url)}" download="{html.escape(filename)}">{html.escape(filename)}{J.RES_DL}</a>
     </p>
     <p><a href="/">{J.TOP}</a> {J.LINK_SEP} <a href="{html.escape(preview_url)}">{J.PREVIEW_FULL}</a></p>
   </div>
@@ -377,7 +377,7 @@ body{{font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Me
 a{{color:#1565c0;}}
 </style>
 </head><body>
-<p><a href="/download?token={urllib.parse.quote(token, safe='')}" download>{html.escape(name)}{J.RES_DL}</a> {J.LINK_SEP} <a href="/">{J.TOP}</a></p>
+<p><a href="/download?token={urllib.parse.quote(token, safe='')}" download="{html.escape(name)}">{html.escape(name)}{J.RES_DL}</a> {J.LINK_SEP} <a href="/">{J.TOP}</a></p>
 {table}
 </body></html>"""
             self._send_html(body)
@@ -422,14 +422,15 @@ a{{color:#1565c0;}}
                 with tempfile.TemporaryDirectory() as tmp:
                     tmp_path = Path(tmp)
                     src_p = tmp_path / "source.csv"
-                    out_p = tmp_path / "mae_edit.csv"
+                    edit_name = extract_edit_filename()
+                    out_p = tmp_path / edit_name
                     src_p.write_bytes(src)
                     run_extract(src_p, out_p)
                     out_data = out_p.read_bytes()
-                token = _store_output("mae_edit.csv", out_data)
+                token = _store_output(edit_name, out_data)
                 page = _result_page(
                     J.OK_EXTRACT_TITLE,
-                    "mae_edit.csv",
+                    edit_name,
                     token,
                     J.OK_EXTRACT_MSG,
                     out_data,
